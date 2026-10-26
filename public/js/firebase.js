@@ -51,7 +51,62 @@ if (['localhost', '127.0.0.1'].includes(location.hostname)) {
 }
 export { doc, getDoc, setDoc, serverTimestamp };
 export async function createReservation(data) {
-  return (await httpsCallable(functions, 'createReservation')(data)).data;
+  if (!auth.currentUser) {
+    throw new Error('Please sign in before booking.');
+  }
+
+  const { collection, doc, setDoc, Timestamp } =
+    await import('https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js');
+
+  const { branch, date, slot, party, name, phone, notes } = data;
+
+  if (!Number.isInteger(party) || party < 1 || party > 20) {
+    throw new Error('Party size must be between 1 and 20.');
+  }
+
+  if (!branch || !name?.trim() ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot)) {
+    throw new Error('Invalid reservation information.');
+  }
+
+  const at = new Date(`${date}T${slot}:00+08:00`);
+  const now = new Date();
+
+  if (!Number.isFinite(at.getTime()) ||
+      at <= now ||
+      at.getTime() > now.getTime() + 30 * 86400000) {
+    throw new Error('Choose a valid future reservation time.');
+  }
+
+  const ref = doc(collection(db, 'tickets'));
+  const no = ref.id.slice(0, 6).toUpperCase();
+
+  await setDoc(ref, {
+    no,
+    type: 'reserve',
+    status: 'reserved',
+    ownerUid: auth.currentUser.uid,
+    branch,
+    date,
+    slot,
+    at: Timestamp.fromDate(at),
+    party,
+    where: `${date} · ${slot}`,
+    time: `Booked ${new Date().toLocaleDateString()}`,
+    items: [`Table for ${party} · ${name.trim()}`].concat(
+      notes?.trim() ? [notes.trim().slice(0, 120)] : []
+    ),
+    customer: {
+      name: name.trim().slice(0, 60),
+      email: auth.currentUser.email,
+      ...(phone?.trim() ? { phone: phone.trim().slice(0, 20) } : {})
+    },
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+
+  return { id: ref.id, no };
 }
 
 export async function createMenuOrder(data) {

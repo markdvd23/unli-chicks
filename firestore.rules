@@ -81,8 +81,20 @@ service cloud.firestore {
             && holdable(request.resource.data.itemId)
             && (isStaff() || request.resource.data.customer.email == request.auth.token.email))
           ||
-          (request.resource.data.type == 'reserve' && request.resource.data.status == 'reserved'
-            && isStaff())
+          (request.resource.data.type == 'reserve'
+            && request.resource.data.status == 'reserved'
+            && request.resource.data.party is int
+            && request.resource.data.party >= 1
+            && request.resource.data.party <= 20
+            && request.resource.data.at is timestamp
+            && request.resource.data.at > request.time
+            && request.resource.data.customer is map
+            && request.resource.data.customer.email == request.auth.token.email
+            && request.resource.data.customer.name is string
+            && request.resource.data.customer.name.size() >= 1
+            && request.resource.data.customer.name.size() <= 60
+            && request.resource.data.customer.keys().hasOnly(['name', 'email', 'phone'])
+            && request.resource.data.updatedAt == request.time)
         );
 
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
@@ -189,6 +201,47 @@ service cloud.firestore {
     match /mail/{mailId} {
       allow read, write: if false;
     }
+
+    // SECURITY DEMONSTRATION ONLY
+    // Restricted to two test accounts and disposable records.
+    match /securityDemoTickets/{ticketId} {
+
+      function demoUser() {
+        return request.auth != null
+          && request.auth.uid in [
+            '8ZImBihJ9qSEDZqx1RUq6yLirfs1',
+            '5izz1fslROe7pBOHNkKQB5JljeF2'
+          ];
+      }
+
+      function validDemoRecord() {
+        return request.resource.data.keys().hasOnly([
+          'demo', 'ownerUid', 'date', 'slot',
+          'party', 'updatedAt'
+        ])
+        && request.resource.data.demo == true
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.date is string
+        && request.resource.data.slot is string
+        && request.resource.data.party is int;
+      }
+
+      allow read: if demoUser();
+
+      allow create: if demoUser()
+        && validDemoRecord();
+
+      // Deliberately vulnerable for IDOR demonstration.
+      // Either test account can modify the other's demo record.
+      allow update: if demoUser()
+        && resource.data.demo == true
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['date', 'slot', 'party', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
 
     // Anything not matched above is closed.
   }
