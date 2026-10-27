@@ -60,15 +60,18 @@ service cloud.firestore {
       }
 
       // Staff see the whole board; a customer sees only their own tickets.
-      allow read: if isStaff() || (signedIn() && mine());
+      allow read: if isStaff()
+        || (signedIn() && mine())
+        || (signedIn() && resource.data.get('securityDemo', false) == true);
 
       // Customers may place a pickup hold on a limited dish that isn't
       // hidden, or book a table — both only for themselves. Staff may also
       // book reserves (catering) for anyone. Either way, only at a branch
       // that's taking bookings.
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['no', 'type', 'status', 'where', 'time', 'party', 'items', 'itemId', 'customer', 'ownerUid', 'branch', 'date', 'slot', 'at', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['no', 'type', 'status', 'where', 'time', 'party', 'items', 'itemId', 'customer', 'ownerUid', 'branch', 'date', 'slot', 'at', 'createdAt', 'updatedAt', 'securityDemo'])
         && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.get('securityDemo', false) is bool
         && bookable(request.resource.data.get('branch', null))
         && request.resource.data.createdAt == request.time
         && request.resource.data.items is list
@@ -112,6 +115,21 @@ service cloud.firestore {
           )
         );
 
+      // SCHOOL DEMO: all authenticated users may reschedule marked tickets.
+      allow update: if signedIn()
+        && resource.data.get('securityDemo', false) == true
+        && resource.data.type == 'reserve'
+        && resource.data.status == 'reserved'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['date', 'slot', 'at', 'where', 'updatedAt'])
+        && request.resource.data.date is string
+        && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.slot is string
+        && request.resource.data.slot.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+        && request.resource.data.at is timestamp
+        && request.resource.data.at > request.time
+        && request.resource.data.at <= request.time + duration.value(30, 'd')
+        && request.resource.data.updatedAt == request.time;
       allow delete: if false;
     }
 

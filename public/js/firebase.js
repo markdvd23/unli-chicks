@@ -87,6 +87,8 @@ export async function createReservation(data) {
     type: 'reserve',
     status: 'reserved',
     ownerUid: auth.currentUser.uid,
+    ...(new URLSearchParams(location.search).get('securityDemo') === '1'
+      ? { securityDemo: true } : {}),
     branch,
     date,
     slot,
