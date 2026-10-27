@@ -202,7 +202,7 @@ form.addEventListener('submit', async e => {
   try {
     const saved = rescheduleId
       ? await rescheduleReservation({ ticketId: rescheduleId, date: d.date, slot: d.slot })
-      : await createReservation({ branch: branch.id, date: d.date, slot: d.slot, party: d.party, name: d.name, phone: d.phone, notes: d.notes });
+      : await createReservation({ branch: branch.id, date: d.date, slot: d.slot, party: d.party, name: d.name, phone: d.phone, notes: d.notes, securityDemo: document.getElementById('bkSecurityDemo').checked });
     ticket.id = saved.id;
     ticket.no = saved.no;
   } catch (err) {

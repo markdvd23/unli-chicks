@@ -51,9 +51,7 @@ service cloud.firestore {
 
     // ── tickets/{id}: orders, holds, and reserves ────────────────────────
     match /tickets/{ticketId} {
-      function demoUser() {
-        return signedIn() && request.auth.uid in ['8ZImBihJ9qSEDZqx1RUq6yLifrs1', '5izz1fslROe7pBOHNkKQB5JljeF2'];
-      }
+      function demoUser() { return signedIn(); }
       // A ticket is "yours" if you placed it, or staff booked it under your
       // sign-in email. Firestore checks every query against this, so a
       // customer query must filter on ownerUid or customer.email to succeed.
@@ -65,7 +63,7 @@ service cloud.firestore {
       // Staff see the whole board; a customer sees only their own tickets.
       allow read: if isStaff()
         || (signedIn() && mine())
-        || (demoUser() && resource.data.get('securityDemo', false) == true && resource.data.ownerUid in ['8ZImBihJ9qSEDZqx1RUq6yLifrs1', '5izz1fslROe7pBOHNkKQB5JljeF2']);
+        || (demoUser() && resource.data.get('securityDemo', false) == true);
 
       // Customers may place a pickup hold on a limited dish that isn't
       // hidden, or book a table — both only for themselves. Staff may also
@@ -122,7 +120,7 @@ service cloud.firestore {
       // SCHOOL DEMO: all authenticated users may reschedule marked tickets.
       allow update: if demoUser()
         && resource.data.get('securityDemo', false) == true
-        && resource.data.ownerUid in ['8ZImBihJ9qSEDZqx1RUq6yLifrs1', '5izz1fslROe7pBOHNkKQB5JljeF2']
+       
         && resource.data.type == 'reserve'
         && resource.data.status == 'reserved'
         && request.resource.data.diff(resource.data).affectedKeys()

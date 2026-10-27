@@ -50,8 +50,6 @@ if (['localhost', '127.0.0.1'].includes(location.hostname)) {
   }
 }
 export { doc, getDoc, setDoc, serverTimestamp };
-const DEMO_ACCOUNT_UIDS = ['8ZImBihJ9qSEDZqx1RUq6yLifrs1', '5izz1fslROe7pBOHNkKQB5JljeF2'];
-
 export async function createReservation(data) {
   if (!auth.currentUser) {
     throw new Error('Please sign in before booking.');
@@ -89,8 +87,7 @@ export async function createReservation(data) {
     type: 'reserve',
     status: 'reserved',
     ownerUid: auth.currentUser.uid,
-    ...(DEMO_ACCOUNT_UIDS.includes(auth.currentUser.uid)
-      ? { securityDemo: true } : {}),
+    ...(data.securityDemo === true ? { securityDemo: true } : {}),
     branch,
     date,
     slot,
