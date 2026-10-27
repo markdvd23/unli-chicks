@@ -51,6 +51,9 @@ service cloud.firestore {
 
     // ── tickets/{id}: orders, holds, and reserves ────────────────────────
     match /tickets/{ticketId} {
+      function demoUser() {
+        return signedIn() && request.auth.uid in ['8ZImBihJ9qSEDZqx1RUq6yLifrs1', '5izz1fslROe7pBOHNkKQB5JljeF2'];
+      }
       // A ticket is "yours" if you placed it, or staff booked it under your
       // sign-in email. Firestore checks every query against this, so a
       // customer query must filter on ownerUid or customer.email to succeed.
@@ -62,7 +65,7 @@ service cloud.firestore {
       // Staff see the whole board; a customer sees only their own tickets.
       allow read: if isStaff()
         || (signedIn() && mine())
-        || (signedIn() && resource.data.get('securityDemo', false) == true);
+        || (demoUser() && resource.data.get('securityDemo', false) == true && resource.data.ownerUid in ['8ZImBihJ9qSEDZqx1RUq6yLifrs1', '5izz1fslROe7pBOHNkKQB5JljeF2']);
 
       // Customers may place a pickup hold on a limited dish that isn't
       // hidden, or book a table — both only for themselves. Staff may also
@@ -72,6 +75,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['no', 'type', 'status', 'where', 'time', 'party', 'items', 'itemId', 'customer', 'ownerUid', 'branch', 'date', 'slot', 'at', 'createdAt', 'updatedAt', 'securityDemo'])
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.get('securityDemo', false) is bool
+        && (request.resource.data.get('securityDemo', false) == false || demoUser())
         && bookable(request.resource.data.get('branch', null))
         && request.resource.data.createdAt == request.time
         && request.resource.data.items is list
@@ -116,12 +120,13 @@ service cloud.firestore {
         );
 
       // SCHOOL DEMO: all authenticated users may reschedule marked tickets.
-      allow update: if signedIn()
+      allow update: if demoUser()
         && resource.data.get('securityDemo', false) == true
+        && resource.data.ownerUid in ['8ZImBihJ9qSEDZqx1RUq6yLifrs1', '5izz1fslROe7pBOHNkKQB5JljeF2']
         && resource.data.type == 'reserve'
         && resource.data.status == 'reserved'
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['date', 'slot', 'at', 'where', 'updatedAt'])
+          .hasOnly(['date', 'slot', 'at', 'where', 'party', 'updatedAt'])
         && request.resource.data.date is string
         && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
         && request.resource.data.slot is string
