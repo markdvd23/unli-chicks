@@ -93,16 +93,17 @@ export function watchMine(onChange, onError) {
   const user = auth.currentUser;
   const mine = new Map();   // ownerUid matches
   const forMe = new Map();  // customer.email matches
+  const demos = new Map();  // classroom-created dummy bookings
   let answered = 0;
   const emit = () => {
-    if (answered < 2) return; // wait for both, so cards don't flash "empty" first
-    onChange([...new Map([...forMe, ...mine]).values()]);
+    if (answered < 3) return; // wait for all, so cards don't flash "empty" first
+    onChange([...new Map([...forMe, ...mine, ...demos]).values()]);
   };
-  const listen = (q, into) => {
+  const listen = (q, into, transform = (id, data) => ({ id, ...data })) => {
     let first = true;
     return onSnapshot(q, snap => {
       into.clear();
-      snap.docs.forEach(d => into.set(d.id, { id: d.id, ...d.data() }));
+      snap.docs.forEach(d => into.set(d.id, transform(d.id, d.data())));
       if (first) { first = false; answered += 1; }
       emit();
     }, err => {
@@ -114,5 +115,21 @@ export function watchMine(onChange, onError) {
   const stops = [listen(query(tickets, where('ownerUid', '==', user.uid)), mine)];
   if (user.email) stops.push(listen(query(tickets, where('customer.email', '==', user.email)), forMe));
   else answered += 1;
+  stops.push(listen(
+    query(collection(db, 'securityDemoTickets'), where('ownerUid', '==', user.uid)),
+    demos,
+    (id, data) => demoAsTicket(id, data)
+  ));
   return () => stops.forEach(stop => stop());
+}
+
+// Display the same disposable demo document on the normal My Plans UI.
+export function demoAsTicket(id, d) {
+  return {
+    ...d, id, no: id.slice(0, 6).toUpperCase(),
+    type: 'reserve', status: 'reserved', branch: 'Classroom demo',
+    customer: { name: 'Dummy customer' },
+    items: ['Classroom dummy reservation'],
+    createdAt: d.updatedAt, isClassroomDemo: true
+  };
 }

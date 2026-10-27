@@ -2,7 +2,7 @@
  * `reserve` ticket owned by the customer. firestore.rules re-checks the party
  * size, the time window, and that it's booked under the customer's own email. */
 import { auth, db, doc, getDoc, createReservation, joinWaitlist, rescheduleReservation } from '../../js/firebase.js';
-import { Timestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import { Timestamp, collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
 import { loadBranches, isoDate, fmtDay, fmtSlot, watchMine, upcoming, downloadIcs } from './mine.js';
 
 const BOOK_DAYS = 30;     // how far ahead customers can book
@@ -202,7 +202,16 @@ form.addEventListener('submit', async e => {
   try {
     const saved = rescheduleId
       ? await rescheduleReservation({ ticketId: rescheduleId, date: d.date, slot: d.slot })
-      : await createReservation({ branch: branch.id, date: d.date, slot: d.slot, party: d.party, name: d.name, phone: d.phone, notes: d.notes, securityDemo: document.getElementById('bkSecurityDemo')?.checked === true });
+      : await (async () => {
+          // Classroom-only dummy booking. This collection is intentionally
+          // vulnerable to cross-account demo changes, unlike production tickets.
+          const ref = await addDoc(collection(db, 'securityDemoTickets'), {
+            demo: true, ownerUid: auth.currentUser.uid,
+            date: d.date, slot: d.slot, party: d.party,
+            updatedAt: serverTimestamp()
+          });
+          return { id: ref.id, no: ref.id.slice(0, 6).toUpperCase() };
+        })();
     ticket.id = saved.id;
     ticket.no = saved.no;
   } catch (err) {

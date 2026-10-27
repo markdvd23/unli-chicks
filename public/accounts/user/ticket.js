@@ -1,8 +1,8 @@
 /* One ticket, live (docs/plan.md build order 5). The customer may cancel their own
  * upcoming reservation; firestore.rules only allows reserved → cancelled. */
 import { auth, db, doc, serverTimestamp } from '../../js/firebase.js';
-import { onSnapshot, updateDoc } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
-import { STATUS, TYPE, upcoming, whenOf, fmtCreated, fmtSlot, branchOf, downloadIcs, loadBranches } from './mine.js';
+import { onSnapshot, updateDoc, getDoc } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+import { STATUS, TYPE, upcoming, whenOf, fmtCreated, fmtSlot, branchOf, downloadIcs, loadBranches, demoAsTicket } from './mine.js';
 
 const box = document.getElementById('detail');
 const id = new URLSearchParams(location.search).get('id');
@@ -49,7 +49,7 @@ function render(t) {
   const actions = el('div', 'detail-actions');
   const note = el('small', 'save-note');
   note.setAttribute('aria-live', 'polite');
-  if (upcoming(t)) {
+  if (upcoming(t) && !t.isClassroomDemo) {
     const move = Object.assign(el('a', 'btn-ghost', 'Reschedule'), { href: 'book.html?branch=' + encodeURIComponent((t.branch || '').toLowerCase()) + '&reschedule=' + encodeURIComponent(t.id) });
     const cancel = el('button', 'btn-ghost', 'Cancel reservation');
     cancel.type = 'button';
@@ -97,6 +97,21 @@ async function cancelReserve(t, btn, note) {
 await Promise.all([UnliSession.whenReady(), loadBranches()]);
 if (auth.currentUser) {
   if (!id) missing();
-  // A ticket that isn't yours is refused by the rules, so it reads as "not found".
-  else onSnapshot(doc(db, 'tickets', id), snap => (snap.exists() ? render({ id: snap.id, ...snap.data() }) : missing()), missing);
+  else {
+    // Look up classroom dummy bookings first. They are intentionally kept in
+    // the separate demo collection and do not weaken production ticket rules.
+    const demoRef = doc(db, 'securityDemoTickets', id);
+    try {
+      const snap = await getDoc(demoRef);
+      if (snap.exists() && snap.data().ownerUid === auth.currentUser.uid) {
+        onSnapshot(demoRef,
+          live => live.exists() ? render(demoAsTicket(live.id, live.data())) : missing(),
+          missing);
+      } else {
+        onSnapshot(doc(db, 'tickets', id),
+          live => live.exists() ? render({ id: live.id, ...live.data() }) : missing(),
+          missing);
+      }
+    } catch (err) { console.warn('Could not load ticket', err); missing(); }
+  }
 }
