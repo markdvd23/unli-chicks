@@ -236,8 +236,9 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && validDemoBooking(request.resource.data);
 
-      // Owner may modify only approved fields, not ownership/demo flag.
-      // Validate the entire resulting record, blocking negative guest counts.
+      // Owners may reschedule, but cannot change the guest count.
+      // Firestore rejects party modifications, even if the new value is valid.
+      // Other users cannot update the reservation at all.
       allow update: if signedIn()
         && resource.data.ownerUid == request.auth.uid
         && request.resource.data.ownerUid == resource.data.ownerUid
@@ -245,7 +246,7 @@ service cloud.firestore {
         && validDemoBooking(request.resource.data)
         && request.resource.data.diff(resource.data)
           .affectedKeys()
-          .hasOnly(['date', 'slot', 'party', 'updatedAt']);
+          .hasOnly(['date', 'slot', 'updatedAt']);
 
       allow delete: if false;
     }
