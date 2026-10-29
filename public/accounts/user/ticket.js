@@ -101,6 +101,13 @@ if (auth.currentUser) {
     // Look up classroom dummy bookings first. They are intentionally kept in
     // the separate demo collection and do not weaken production ticket rules.
     const demoRef = doc(db, 'securityDemoTickets', id);
+
+    // Under owner-only demo rules, even a lookup for a nonexistent demo ID
+    // may be denied. Normal tickets must still load without exposing demos.
+    const watchRegularTicket = () => onSnapshot(doc(db, 'tickets', id),
+      live => live.exists() ? render({ id: live.id, ...live.data() }) : missing(),
+      missing);
+
     try {
       const snap = await getDoc(demoRef);
       if (snap.exists() && snap.data().ownerUid === auth.currentUser.uid) {
@@ -108,10 +115,17 @@ if (auth.currentUser) {
           live => live.exists() ? render(demoAsTicket(live.id, live.data())) : missing(),
           missing);
       } else {
-        onSnapshot(doc(db, 'tickets', id),
-          live => live.exists() ? render({ id: live.id, ...live.data() }) : missing(),
-          missing);
+        watchRegularTicket();
       }
-    } catch (err) { console.warn('Could not load ticket', err); missing(); }
+    } catch (err) {
+      if (err.code === 'permission-denied') {
+        // Firestore protects another user's demo ticket (or an absent one).
+        // Try the separately authorized regular-ticket collection.
+        watchRegularTicket();
+      } else {
+        console.warn('Could not load ticket', err);
+        missing();
+      }
+    }
   }
 }
